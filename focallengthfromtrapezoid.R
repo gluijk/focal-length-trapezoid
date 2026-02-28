@@ -1,6 +1,6 @@
 # Derive focal length, aspect ratio and FOV from an image with some trapezoid
 # www.overfitting.net
-# https://www.overfitting.net/
+# https://www.overfitting.net/2026/02/calculando-la-distancia-focal-con-que.html
 
 library(tiff)
 
