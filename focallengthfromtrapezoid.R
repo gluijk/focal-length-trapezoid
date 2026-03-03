@@ -167,7 +167,8 @@ get_aspectratio_focallength_FOV <- function(width, height, x, y) {
     FOV_d_deg  <- rad2deg(FOV_d)
     
     # ---- FF equivalent focal length (mm) ----
-    FF_diag_mm <- sqrt(36^2 + 24^2)  # FF sensor dimensions in mm
+    FF_diag_mm <- sqrt(36^2 + 24^2)  # FF sensor dimensions in mm (nominal FF sensor)
+    # FF_diag_mm <- sqrt(35.8^2 + 23.9^2)  # FF sensor dimensions in mm (Sony A7 II)
     focal_length_FF_mm <- (FF_diag_mm / 2) / tan(FOV_d / 2)
     
     # ---- PRINT RESULTS ----
