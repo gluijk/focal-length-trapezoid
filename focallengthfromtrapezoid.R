@@ -2,7 +2,6 @@
 # www.overfitting.net
 # https://www.overfitting.net/2026/02/calculando-la-distancia-focal-con-que.html
 
-library(tiff)
 
 classify_aspect_ratio <- function(ratio, tolerance = 0.05) {
     # Orientation invariant
