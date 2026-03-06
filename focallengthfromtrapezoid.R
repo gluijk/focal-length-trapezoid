@@ -43,11 +43,11 @@ classify_aspect_ratio <- function(ratio, tolerance = 0.05) {
 get_aspectratio_focallength_FOV <- function(width, height, x, y) {
     # width and height are the dimensions of the image in pixels
     # x and y are vectors containing the coordinates of the four vertices of the trapezoid
-    # expressed in (top-left, bottom-left, bottom-right, top-right) order
+    # expressed in top-left, bottom-left, bottom-right, top-right order
     
     require(png)
     
-    # Obtain sensor format aspect ratio
+    # Obtain image format aspect ratio
     image_aspect_ratio = width / height
     aspect_ratio_label = classify_aspect_ratio(image_aspect_ratio)
     
@@ -60,7 +60,7 @@ get_aspectratio_focallength_FOV <- function(width, height, x, y) {
         M[cbind(ys, xs)] <- 1
         M
     }
-    # Plot 3-pixel width lines
+    # 3-pixel width lines
     for (dx in c(-1,0,1)) {
         for (dy in c(-1,0,1)) {
             img=draw_line(img, x[1]+dx, y[1]+dy, x[2]+dx, y[2]+dy)
@@ -75,9 +75,9 @@ get_aspectratio_focallength_FOV <- function(width, height, x, y) {
     # Let m1x,m1y...m4x,m4y be the (x,y) pixel coordinates of the 4 corners of the detected quadrangle
     # i.e. (m1x, m1y) are the cordinates of the first corner, (m2x, m2y) of the second corner and so on
     # m1, m2, m3, m4 follow the order: top-left, top-right, bottom-left, bottom-right
-    # Let u0, v0 be the pixel coordinates of the principal point of the image
+    # Let u0, v0 be the pixel coordinates of the principal point of the image (optical axis)
     # which for a normal camera will be the centre of the image: i.e. u0=IMAGEWIDTH/2, v0 =IMAGEHEIGHT/2
-    # This assumption does not hold if the image has been cropped asymmetrically
+    # This assumption does not hold if the image has been cropped asymmetrically or shifted
     
     # Transform the image so the principal point is at (0,0) which makes the following equations much easier
     # Image center (principal point assumption)
@@ -87,6 +87,7 @@ get_aspectratio_focallength_FOV <- function(width, height, x, y) {
     # Shift coordinates
     # NOTE: m1, m2, m3, m4 follow the order: top-left, top-right, bottom-left, bottom-right
     # as in the original paper "Whiteboard scanning and image enhancement" by Zhengyou Zhang
+    # but (x,y) follow top-left, bottom-left, bottom-right, top-right
     m1x <- x[1] - u0; m1y <- y[1] - v0  # top-left
     m3x <- x[2] - u0; m3y <- y[2] - v0  # bottom-left
     m4x <- x[3] - u0; m4y <- y[3] - v0  # bottom-right
@@ -155,12 +156,12 @@ get_aspectratio_focallength_FOV <- function(width, height, x, y) {
     }
     
     # FOV calculations (radians)
+    diag_px <- sqrt(width^2 + height^2) 
     FOV_x  <- 2 * atan((width  / 2) / focal_length_px)
     FOV_y  <- 2 * atan((height / 2) / focal_length_px)
-    FOV_d  <- 2 * atan((sqrt(width^2 + height^2) / 2) / focal_length_px)
+    FOV_d  <- 2 * atan((diag_px / 2) / focal_length_px)
     
     rad2deg <- function(r) r * 180 / pi
-    
     FOV_x_deg  <- rad2deg(FOV_x)
     FOV_y_deg  <- rad2deg(FOV_y)
     FOV_d_deg  <- rad2deg(FOV_d)
@@ -169,7 +170,8 @@ get_aspectratio_focallength_FOV <- function(width, height, x, y) {
     FF_diag_mm <- sqrt(36^2 + 24^2)  # FF sensor dimensions in mm (nominal FF sensor)
     # FF_diag_mm <- sqrt(35.8^2 + 23.9^2)  # FF sensor dimensions in mm (Sony A7 II)
     focal_length_FF_mm <- (FF_diag_mm / 2) / tan(FOV_d / 2)
-    
+    # focal_length_FF_mm = focal_length_px * FF_diag_mm / diag_px
+
     # ---- PRINT RESULTS ----
     cat(sprintf("Image aspect ratio (W/H): %.2f %s\n", image_aspect_ratio,
                 ifelse(aspect_ratio_label=="", "", paste0("[",aspect_ratio_label,"]"))))
@@ -180,7 +182,7 @@ get_aspectratio_focallength_FOV <- function(width, height, x, y) {
     return(list(
         image_aspect_ratio = image_aspect_ratio,
         rectangle_aspect_ratio = whRatio,
-        # focal_length_pixels = focal_length_px,
+        # focal_length_pixels = focal_length_px,  # image dependant value, not relevant
         focal_length_FF_mm = focal_length_FF_mm,
         FOV_x_deg = FOV_x_deg,
         FOV_y_deg = FOV_y_deg,
