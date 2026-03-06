@@ -97,13 +97,13 @@ get_aspectratio_focallength_FOV <- function(width, height, x, y) {
     
     # Compute k2
     k2 <- ((m1y - m4y) * m3x - (m1x - m4x) * m3y + m1x * m4y - m1y * m4x) /
-        ((m2y - m4y) * m3x - (m2x - m4x) * m3y + m2x * m4y - m2y * m4x)
+          ((m2y - m4y) * m3x - (m2x - m4x) * m3y + m2x * m4y - m2y * m4x)
     # Compute k3
     k3 <- ((m1y - m4y) * m2x - (m1x - m4x) * m2y + m1x * m4y - m1y * m4x) /
-        ((m3y - m4y) * m2x - (m3x - m4x) * m2y + m3x * m4y - m3y * m4x)
+          ((m3y - m4y) * m2x - (m3x - m4x) * m2y + m3x * m4y - m3y * m4x)
     # Focal length in pixels
     focal_length_px_squared <- -((k3 * m3y - m1y) * (k2 * m2y - m1y) + (k3 * m3x - m1x) * (k2 * m2x - m1x)) /
-        ((k3 - 1) * (k2 - 1))
+                                ((k3 - 1) * (k2 - 1))
     focal_length_px <- sqrt(focal_length_px_squared)
     
     
