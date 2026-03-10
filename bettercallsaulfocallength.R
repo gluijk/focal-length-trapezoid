@@ -7,36 +7,35 @@ library(Rcpp)
 # Quick Bresenham algorithm to draw lines over a matrix
 # img is modified directly (no matrix copying)
 cppFunction('
-void draw_line_bresenham(NumericMatrix img, int x0, int y0, int x1, int y1)
-{
-    // convert R indexing -> C indexing
-    x0--; y0--; x1--; y1--;
-
-    int dx = std::abs(x1 - x0);
-    int dy = std::abs(y1 - y0);
-
-    int sx = (x0 < x1) ? 1 : -1;
-    int sy = (y0 < y1) ? 1 : -1;
-
-    int err = dx - dy;
-
-    while(!(x0 == x1 && y0 == y1))  // never plot last pixel to prevent plotting corner pixels twice
+    void draw_line_bresenham(NumericMatrix img, int x0, int y0, int x1, int y1)
     {
-        if(x0 >= 0 && x0 < img.ncol() && y0 >= 0 && y0 < img.nrow()) img(y0, x0) += 1.0;
-
-        int e2 = 2 * err;
-        if(e2 > -dy)
+        x0--; y0--; x1--; y1--;  // convert R indexing -> C indexing
+    
+        int dx = std::abs(x1 - x0);
+        int dy = std::abs(y1 - y0);
+    
+        int sx = (x0 < x1) ? 1 : -1;
+        int sy = (y0 < y1) ? 1 : -1;
+    
+        int err = dx - dy;
+    
+        while(!(x0 == x1 && y0 == y1))  // never plot last pixel to prevent plotting corner pixels twice
         {
-            err -= dy;
-            x0 += sx;
-        }
-        if(e2 < dx)
-        {
-            err += dx;
-            y0 += sy;
+            if(x0 >= 0 && x0 < img.ncol() && y0 >= 0 && y0 < img.nrow()) img(y0, x0) += 1.0;
+    
+            int e2 = 2 * err;
+            if(e2 > -dy)
+            {
+                err -= dy;
+                x0 += sx;
+            }
+            if(e2 < dx)
+            {
+                err += dx;
+                y0 += sy;
+            }
         }
     }
-}
 ')
 
 
