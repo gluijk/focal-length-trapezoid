@@ -297,10 +297,6 @@ get_aspectratio_focallength_FOV_Montecarlo <- function(width, height, x, y, N = 
                  (k3 * m3x - m1x)^2 / focal_length_px_squared)
         )
         
-        # FOV (deg) and FF equivalent focal length (mm) calculations
-        # FOV_x_deg  <- rad2deg(2 * atan((width  / 2) / focal_length_px))
-        # FOV_y_deg  <- rad2deg(2 * atan((height / 2) / focal_length_px))
-        # FOV_d_deg  <- rad2deg(2 * atan((diag_px / 2) / focal_length_px))
         focal_length_FF_mm = focal_length_px * FF_diag_mm / diag_px
         
         # Store valid calculations
@@ -316,8 +312,8 @@ get_aspectratio_focallength_FOV_Montecarlo <- function(width, height, x, y, N = 
     
     # Focal length
     median_fl=median(focal_length_FF_mmAC)
-    values=focal_length_FF_mmAC[focal_length_FF_mmAC<=3*median_fl]
-    xlim=c(0, 150)  # c(min(values), max(values))
+    values=focal_length_FF_mmAC[focal_length_FF_mmAC <= 5*median_fl]
+    xlim=c(min(values), max(values))
     hist(values, breaks=800, xlim=xlim, xlab="mm", ylab="", cex.main=0.9,
          main=paste0("Focal length FF: USR=", round(focal_length_FF_mmAC[1], 2),
                      "mm, Med=", round(median_fl, 2), "mm"))
@@ -326,8 +322,8 @@ get_aspectratio_focallength_FOV_Montecarlo <- function(width, height, x, y, N = 
     
     # Aspect ratio
     median_ar=median(whRatioAC)
-    values=whRatioAC[whRatioAC<=3*median_ar]
-    xlim=c(0, 4)  # c(min(values), max(values))
+    values=whRatioAC[whRatioAC <= 5*median_ar]
+    xlim=c(min(values), max(values))
     hist(values, breaks=800, xlim=xlim, xlab="Aspect ratio", ylab="", cex.main=0.9,
          main=paste0("Aspect ratio: USR=", round(whRatioAC[1], 2),
                      ", Med=", round(median_ar, 2)))
@@ -345,9 +341,6 @@ get_aspectratio_focallength_FOV_Montecarlo <- function(width, height, x, y, N = 
         image_aspect_ratio = image_aspect_ratio,
         rectangle_aspect_ratio = whRatioAC,
         focal_length_FF_mm = focal_length_FF_mmAC
-        # FOV_x_deg = FOV_x_deg,
-        # FOV_y_deg = FOV_y_deg,
-        # FOV_diag_deg = FOV_d_deg
     ))
 }
 
@@ -381,6 +374,13 @@ width=1280; height=720
 diag=(width^2+height^2)^0.5; sd=diag/300
 x=c(209, 279, 929, 759)
 y=c(517, 640, 609, 495)
+AR=get_aspectratio_focallength_FOV(width, height, x, y)
+AR2=get_aspectratio_focallength_FOV_Montecarlo(width, height, x, y, N=100000, sd=sd)
+
+# 10 - BAD EXAMPLE IN FL, GOOD IN AR
+width=1920; height=1080
+x=c(24,   18, 1843, 1853)
+y=c(25, 1008, 1037, 25)
 AR=get_aspectratio_focallength_FOV(width, height, x, y)
 AR2=get_aspectratio_focallength_FOV_Montecarlo(width, height, x, y, N=100000, sd=sd)
 
