@@ -1,8 +1,9 @@
 # Calculating the focal length of a mobile phone's camera
 # www.overfitting.net
-# https://www.overfitting.net/
+# https://www.overfitting.net/2026/03/calculando-la-distancia-focal-de-la.html
 
 library(Rcpp)
+
 
 # Quick Bresenham algorithm to draw lines over a matrix
 # img is modified directly (no matrix copying)
