@@ -362,3 +362,4 @@ x=c(327,   60, 1784, 2875)
 y=c(480, 2340, 3957,  484)
 AR=get_aspectratio_focallength_FOV(width, height, x, y)
 AR2=get_aspectratio_focallength_FOV_Montecarlo(width, height, x, y, N=500000, sd=sd)
+
