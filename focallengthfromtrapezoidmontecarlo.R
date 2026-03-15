@@ -1,6 +1,43 @@
-# Estimated focal length in 10 Better Call Saul wide angle scenes
+# Derive focal length, aspect ratio and FOV from an image with some trapezoid. Montecarlo validation
 # www.overfitting.net
-# https://www.overfitting.net/2026/03/la-fotografia-de-better-call-saul-y.html
+# https://www.overfitting.net/2026/03/calculando-la-distancia-focal-con-que.html
+
+library(Rcpp)
+
+# Quick Bresenham algorithm to draw lines over a matrix
+# img is modified directly (no matrix copying)
+cppFunction('
+    void draw_line_bresenham(NumericMatrix img, int x0, int y0, int x1, int y1)
+    {
+        x0--; y0--; x1--; y1--;  // convert R indexing -> C indexing
+    
+        int dx = std::abs(x1 - x0);
+        int dy = std::abs(y1 - y0);
+    
+        int sx = (x0 < x1) ? 1 : -1;
+        int sy = (y0 < y1) ? 1 : -1;
+    
+        int err = dx - dy;
+    
+        while(!(x0 == x1 && y0 == y1))  // never plot last pixel to prevent plotting corner pixels twice
+        {
+            if(x0 >= 0 && x0 < img.ncol() && y0 >= 0 && y0 < img.nrow()) img(y0, x0) += 1.0;
+    
+            int e2 = 2 * err;
+            if(e2 > -dy)
+            {
+                err -= dy;
+                x0 += sx;
+            }
+            if(e2 < dx)
+            {
+                err += dx;
+                y0 += sy;
+            }
+        }
+    }
+')
+
 
 
 classify_aspect_ratio <- function(ratio, tolerance = 0.05) {
@@ -191,88 +228,160 @@ get_aspectratio_focallength_FOV <- function(width, height, x, y) {
 }
 
 
+# Montecarlo version of get_aspectratio_focallength_FOV()
+# It jitters x and y positions to study aspect ratio and focal length sensitivity
+get_aspectratio_focallength_FOV_Montecarlo <- function(width, height, x, y, N = 10000, sd = 3, jitter = 'normal') {
+    # width and height are the dimensions of the image in pixels
+    # x and y are vectors containing the coordinates of the four vertices of the trapezoid
+    # expressed in top-left, bottom-left, bottom-right, top-right order
+    
+    require(tiff)
+    
+    # Precalculations
+    FF_diag_mm <- sqrt(36^2 + 24^2)  # FF sensor dimensions in mm (nominal FF sensor)
+    diag_px <- sqrt(width^2 + height^2) 
+    rad2deg <- function(r) r * 180 / pi
+    
+    # Obtain image format aspect ratio
+    image_aspect_ratio = width / height
+    aspect_ratio_label = classify_aspect_ratio(image_aspect_ratio)
+    
+    # Transform the image so the principal point is at (0,0) which makes the following equations much easier
+    # Image center (principal point assumption)
+    u0 <- width / 2
+    v0 <- height / 2
+    
+    # Plot of trapezoid for checking
+    img=matrix(0, ncol=width, nrow=height)
+    
+    # Build jitter matrix (first column preserves the original input values
+    # so N=1 means the single point case)
+    if (jitter == 'normal') {  # normal distribution
+        Mx <- x + cbind(0, matrix(rnorm(4*(N-1), sd=sd), nrow=4))
+        My <- y + cbind(0, matrix(rnorm(4*(N-1), sd=sd), nrow=4))
+    } else {  # uniform distribution
+        Mx <- x + cbind(0, matrix(runif(4*(N-1), min=-sd, max=sd), nrow=4))
+        My <- y + cbind(0, matrix(runif(4*(N-1), min=-sd, max=sd), nrow=4))
+    }
+    
+    whRatioAC=c()
+    focal_length_FF_mmAC=c()
+    for (i in 1:N) {
+        
+        # 1-pixel width lines
+        draw_line_bresenham(img, round(Mx[1,i]), round(My[1,i]), round(Mx[2,i]), round(My[2,i]))
+        draw_line_bresenham(img, round(Mx[2,i]), round(My[2,i]), round(Mx[3,i]), round(My[3,i]))
+        draw_line_bresenham(img, round(Mx[3,i]), round(My[3,i]), round(Mx[4,i]), round(My[4,i]))
+        draw_line_bresenham(img, round(Mx[4,i]), round(My[4,i]), round(Mx[1,i]), round(My[1,i]))
+        
+        # Shift coordinates
+        m1x <- Mx[1,i] - u0; m1y <- My[1,i] - v0  # top-left
+        m3x <- Mx[2,i] - u0; m3y <- My[2,i] - v0  # bottom-left
+        m4x <- Mx[3,i] - u0; m4y <- My[3,i] - v0  # bottom-right
+        m2x <- Mx[4,i] - u0; m2y <- My[4,i] - v0  # top-right
+        
+        # Compute k2
+        k2 <- ((m1y - m4y) * m3x - (m1x - m4x) * m3y + m1x * m4y - m1y * m4x) /
+              ((m2y - m4y) * m3x - (m2x - m4x) * m3y + m2x * m4y - m2y * m4x)
+        # Compute k3
+        k3 <- ((m1y - m4y) * m2x - (m1x - m4x) * m2y + m1x * m4y - m1y * m4x) /
+              ((m3y - m4y) * m2x - (m3x - m4x) * m2y + m3x * m4y - m3y * m4x)
+        # Focal length in pixels
+        focal_length_px_squared <- -((k3 * m3y - m1y) * (k2 * m2y - m1y) + (k3 * m3x - m1x) * (k2 * m2x - m1x)) /
+                                    ((k3 - 1) * (k2 - 1))
+        focal_length_px <- sqrt(focal_length_px_squared)
+        
+        # Calculate aspect ratio W/H
+        # Full projective perspective case
+        whRatio <- sqrt(
+            ((k2 - 1)^2 +
+                 (k2 * m2y - m1y)^2 / focal_length_px_squared +
+                 (k2 * m2x - m1x)^2 / focal_length_px_squared) /
+            ((k3 - 1)^2 +
+                 (k3 * m3y - m1y)^2 / focal_length_px_squared +
+                 (k3 * m3x - m1x)^2 / focal_length_px_squared)
+        )
+        
+        focal_length_FF_mm = focal_length_px * FF_diag_mm / diag_px
+        
+        # Store valid calculations
+        if (!is.nan(whRatio)) whRatioAC=c(whRatioAC, whRatio)
+        if (!is.nan(focal_length_FF_mm)) focal_length_FF_mmAC=c(focal_length_FF_mmAC, focal_length_FF_mm)
+        
+    }  # end of Montecarlo loop
+    writeTIFF(img/max(img), paste0("trapezoids_montecarlo", N, ".tiff"), bits.per.sample = 16)
+    
+    # Plotting histograms
+    par(mfrow = c(2,1))
+    
+    # Focal length
+    median_fl=median(focal_length_FF_mmAC)
+    values=focal_length_FF_mmAC[focal_length_FF_mmAC <= 5*median_fl]
+    xlim=c(min(values), max(values))
+    hist(values, breaks=800, xlim=xlim, xlab="mm", ylab="", cex.main=0.9,
+         main=paste0("Focal length FF: USR=", round(focal_length_FF_mmAC[1], 2),
+                     "mm, Med=", round(median_fl, 2), "mm"))
+    abline(v=focal_length_FF_mmAC[1], col='red')
+    abline(v=median_fl, col='green')
+    
+    # Aspect ratio
+    median_ar=median(whRatioAC)
+    values=whRatioAC[whRatioAC <= 5*median_ar]
+    xlim=c(min(values), max(values))
+    hist(values, breaks=800, xlim=xlim, xlab="Aspect ratio", ylab="", cex.main=0.9,
+         main=paste0("Aspect ratio: USR=", round(whRatioAC[1], 2),
+                     ", Med=", round(median_ar, 2)))
+    abline(v=whRatioAC[1], col='red')
+    abline(v=median_ar, col='green')
+    
+    cat(sprintf("Stable focal length calculated values: %d / %.0f (%.1f%%)\n",
+                length(focal_length_FF_mmAC), N,
+                length(focal_length_FF_mmAC)/N*100))
+    cat(sprintf("Stable aspect ratio calculated values: %d / %.0f (%.1f%%)\n",
+                length(whRatioAC), N,
+                length(whRatioAC)/N*100))
+    
+    return(list(
+        image_aspect_ratio = image_aspect_ratio,
+        rectangle_aspect_ratio = whRatioAC,
+        focal_length_FF_mm = focal_length_FF_mmAC
+    ))
+}
+
 
 ###################################################
-# TEN 'BETER CALL SAUL' SCENES
+# EXAMPLES FOR MONTECARLO JITTERING VALIDATION
+# We set sd for each image as 1/300 of its diagonal
 
-# (x,y) coordinates expressed as: top-left, bottom-left, bottom-right, top-right
+# 24mm scene
+# Rhinoceros 2 - SYNTHETIC EXAMPLE
+width=1434; height=956
+diag=(width^2+height^2)^0.5; sd=diag/300
+x=c(217, 220, 524, 612)
+y=c(138, 448, 908, 484)
+AR=get_aspectratio_focallength_FOV(width, height, x, y)  # 1.99 (2), 23.89mm (24)
+AR2=get_aspectratio_focallength_FOV_Montecarlo(width, height, x, y, N=100000, sd=sd)
 
-
-# 01
-width=1280; height=717
-x=c(608, 608, 996, 976)
-y=c(170, 510, 505, 191)
-AR=get_aspectratio_focallength_FOV(width, height, x, y)
-
-
-# 02
-width=776; height=434
-x=c(615, 622, 686, 674)
-y=c(146, 197, 155, 92)
-AR=get_aspectratio_focallength_FOV(width, height, x, y)
-
-width=776; height=434
-x=c(620, 640, 743, 697)
-y=c(202, 374, 386, 152)
-AR=get_aspectratio_focallength_FOV(width, height, x, y)
-
-
-# 03
-width=1000; height=563
-x=c(330, 351, 871, 871)
-y=c(-27, 177, 507, 99)
-AR=get_aspectratio_focallength_FOV(width, height, x, y)
-
-
-# 04
-width=716; height=402
-x=c(213, 209, 374, 371)
-y=c(254, 332, 311, 142)
-AR=get_aspectratio_focallength_FOV(width, height, x, y)
-
-
-# 05
+# 05 - GOOD EXAMPLE
 width=640; height=360
+diag=(width^2+height^2)^0.5; sd=diag/300
 x=c(320,322, 610, 591)
 y=c(92, 350, 320, 195)
 AR=get_aspectratio_focallength_FOV(width, height, x, y)
+AR2=get_aspectratio_focallength_FOV_Montecarlo(width, height, x, y, N=100000, sd=sd)
 
-
-# 06
-width=1440; height=810
-x=c(799, 497, 679, 925)
-y=c(532, 765, 791, 544)
-AR=get_aspectratio_focallength_FOV(width, height, x, y)
-
-
-# 07
+# 07 - BAD EXAMPLE
 width=1280; height=720
+diag=(width^2+height^2)^0.5; sd=diag/300
 x=c(209, 279, 929, 759)
 y=c(517, 640, 609, 495)
 AR=get_aspectratio_focallength_FOV(width, height, x, y)
+AR2=get_aspectratio_focallength_FOV_Montecarlo(width, height, x, y, N=100000, sd=sd)
 
-width=1280; height=720
-x=c(123, 132, 328, 322)
-y=c(  8, 286, 269,   5)
-AR=get_aspectratio_focallength_FOV(width, height, x, y)
-
-
-# 08
-width=1200; height=675
-x=c(664, 666, 1137, 1116)
-y=c(466, 586,  580,  449)
-AR=get_aspectratio_focallength_FOV(width, height, x, y)
-
-
-# 09
-width=735; height=414
-x=c(219, 227, 597, 617)
-y=c( 84, 174, 240, 117)
-AR=get_aspectratio_focallength_FOV(width, height, x, y)
-
-
-# 10
+# 10 - SPECIAL EXAMPLE: BAD IN FL, GOOD IN AR
 width=1920; height=1080
+diag=(width^2+height^2)^0.5; sd=diag/300
 x=c(24,   18, 1843, 1853)
 y=c(25, 1008, 1037,   25)
 AR=get_aspectratio_focallength_FOV(width, height, x, y)
+AR2=get_aspectratio_focallength_FOV_Montecarlo(width, height, x, y, N=100000, sd=sd)
