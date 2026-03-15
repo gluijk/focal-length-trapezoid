@@ -1,6 +1,6 @@
 # Perspective trapezoidal correction maintaining real aspect ratio
 # www.overfitting.net
-# https://www.overfitting.net/
+# https://www.overfitting.net/2026/03/correccion-de-perspectiva-preservando.html
 
 library(tiff)
 library(Rcpp)
