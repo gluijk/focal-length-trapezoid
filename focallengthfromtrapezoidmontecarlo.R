@@ -351,6 +351,7 @@ get_aspectratio_focallength_FOV_Montecarlo <- function(width, height, x, y, N = 
 
 ###################################################
 # EXAMPLES FOR MONTECARLO JITTERING VALIDATION
+
 # We set sd for each image as 1/300 of its diagonal
 
 # 24mm scene
