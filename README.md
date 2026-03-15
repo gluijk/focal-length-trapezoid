@@ -9,4 +9,4 @@ Derive focal length, aspect ratio and FOV from an image with some trapezoid
 
 ![focal-length-trapezoid](/toroamarillo.jpg)
 
-![focal-length-trapezoid](/histograms.png)
+![focal-length-trapezoid](/histogramas.png)
