@@ -3,6 +3,7 @@
 # https://www.overfitting.net/2026/03/calculando-la-distancia-focal-de-la.html
 
 library(Rcpp)
+library(tiff)
 
 
 # Quick Bresenham algorithm to draw lines over a matrix
@@ -350,6 +351,45 @@ get_aspectratio_focallength_FOV_Montecarlo <- function(width, height, x, y, N = 
 }
 
 
+
+# KEYSTONE CORRECTION FUNCTIONS
+
+# Function that models the (xd,yd) -> (xu,yu) transformation through k (8 coefficients)
+# NOTE: when using it, we'll swap the distorted and undistorted trapezoids because
+# we want to model the transformation FROM CORRECTED coords (DST) -> TO UNCORRECTED coords (ORG)
+solve.keystone = function(xd, yd, xu, yu) {
+    # Solve 8 equations linear system: A * k = b -> k = inv(A) * b
+    A=matrix(nrow=8, ncol=8)
+    A[1,]=c(xd[1], yd[1], 1, 0,     0,     0, -xd[1]*xu[1], -yd[1]*xu[1])
+    A[2,]=c(0,     0,     0, xd[1], yd[1], 1, -xd[1]*yu[1], -yd[1]*yu[1])
+    A[3,]=c(xd[2], yd[2], 1, 0,     0,     0, -xd[2]*xu[2], -yd[2]*xu[2])
+    A[4,]=c(0,     0,     0, xd[2], yd[2], 1, -xd[2]*yu[2], -yd[2]*yu[2])
+    A[5,]=c(xd[3], yd[3], 1, 0,     0,     0, -xd[3]*xu[3], -yd[3]*xu[3])
+    A[6,]=c(0,     0,     0, xd[3], yd[3], 1, -xd[3]*yu[3], -yd[3]*yu[3])
+    A[7,]=c(xd[4], yd[4], 1, 0,     0,     0, -xd[4]*xu[4], -yd[4]*xu[4])
+    A[8,]=c(0,     0,     0, xd[4], yd[4], 1, -xd[4]*yu[4], -yd[4]*yu[4])
+    
+    b=as.matrix(c(xu[1], yu[1], xu[2], yu[2], xu[3], yu[3], xu[4], yu[4]))
+    
+    k=solve(A, b)  # equivalent to inv(A) * b = solve(A) %*% b
+    
+    return(k)
+}
+
+# Undo distortion function
+undo.keystone = function(xd, yd, k) {
+    xu=(k[1]*xd+k[2]*yd+k[3]) / (k[7]*xd+k[8]*yd+1)
+    yu=(k[4]*xd+k[5]*yd+k[6]) / (k[7]*xd+k[8]*yd+1)
+    return(c(xu, yu))  # return pair (xu, yu)
+}
+
+# Keystone correction improvement and optimization:
+# 1. C++ compilation of (x,y) nested loops over the output image
+# 2. Bilinear interpolation instead of nearest neighbour interpolation
+sourceCpp("keystone.cpp")  # keystone_correct_cpp() function
+
+
+
 ###################################################
 # EXAMPLES
 
@@ -382,3 +422,59 @@ x=c(299, 1430, 3720, 2574)
 y=c(959, 2566,  860,  231)
 AR=get_aspectratio_focallength_FOV(width, height, x, y)
 AR2=get_aspectratio_focallength_FOV_Montecarlo(width, height, x, y, N=500000, sd=5, random = 'unif')
+
+
+
+
+
+
+###################################################
+# ASPECT RATIO PERSPECTIVE CORRECTION
+
+# Main camera Samsung S20 FE (26mm eq., AR subject=122.4/95.6)
+width=2993; height=3991
+diag=(width^2+height^2)^0.5; sd=diag/2000
+xu=c(327,   60, 1784, 2875)
+yu=c(480, 2340, 3957,  484)
+AR=get_aspectratio_focallength_FOV(width, height, xu, yu)
+
+aspect_ratio=AR$rectangle_aspect_ratio
+aspect_ratio_ideal=122.4/95.6
+
+
+# Distorted points (source)
+imgd=readTIFF("toro.tif")
+
+# Undistorted points (destination)
+# Ad-hoc scaling/shifting adjustments to improve the corrected area
+posx1=(xu[1]+xu[2])/2+200  # top-left corner
+posy1=(yu[1]+yu[4])/2+1000
+
+posx2=(xu[3]+xu[4])/2+200  # bottom-right corner
+posy2=posy1+(posx2-posx1)/aspect_ratio  # THIS SENTENCE forces the desired aspect ratio
+
+xd=c(posx1, posx1, posx2, posx2)
+yd=c(posy1, posy2, posy2, posy1)
+
+
+# Calculate k (8 coefficients) of the keystone correction 
+k=solve.keystone(xd, yd, xu, yu)  # models the (xd,yd) -> (xu,yu) transformation
+
+# Check
+for (i in 1:4) print(undo.keystone(xd[i], yd[i], k))
+
+# Plot trapezoid correction
+png(paste0("correctiontoro.png"), width=512, height=400)
+    plot(c(xd, xd[1]), c(yd, yd[1]), type='l', col='red', asp=1,
+         xlab='X', ylab='Y', xlim=c(1, ncol(imgd)), ylim=c(nrow(imgd), 1))
+    lines(c(xu, xu[1]), c(yu, yu[1]), type='l', col='blue')
+    for (i in 1:4) {
+        lines(c(xd[i], xu[i]), c(yd[i], yu[i]), type='l', lty=3, col='darkgray')
+    }
+    abline(h=c(1,nrow(imgd)), v=c(1,ncol(imgd)))
+dev.off()
+
+
+# Write on imgc_cpp the keystone corrected version of imgd
+imgc_cpp=keystone_correct_cpp(imgd*0, imgd, as.numeric(k))
+writeTIFF(imgc_cpp, "correctedtoro_aspectratio.tif", bits.per.sample=16)
